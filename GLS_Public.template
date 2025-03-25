@@ -1,0 +1,1126 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description:
+  Standup a DAS version in ITE, Staging, or PROD in either the TI or Enterprise environments
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Basic Parameters"
+        Parameters:
+          - Env
+          - ClusterSize
+          - DiskVolumeSize
+          - ClusterPurpose
+          - ProjectPurpose
+          - ProductValue
+          - TeamValue
+          - RunType
+          - ModeOfOperation
+          - JavaVersion
+      - Label:
+          default: "Additional Tags"
+        Parameters:
+          - ApplicationTag
+          - JBIDTag
+          - NoBootstrap
+          - POCTag
+          - PythonReqAll
+          - CustomRequirementFile
+          - FriendlyNameTag
+          - CampaignNameTag
+          - FSXEnabled
+          - NeedSAS
+          - NeedSTATA
+      - Label:
+          default: "Cluster Configuration"
+        Parameters:
+          - Release
+          - DASSubnetAZ
+          - EmrVersion
+          - AMIVersion
+          - WebhookVersion
+          - ParentStackName
+          - JupyterEnabled
+          - AutokillExempt
+      - Label:
+          default: "Spot Configuration Parameters (The following parameters are used when ClusterSize is set to Spot.Custom)"
+        Parameters:
+          - CoreInstanceGroupCount
+          - CoreInstanceGroupType
+          - CoreInstanceVolumeSize
+          - TaskInstanceOnDemandCount
+          - TaskInstanceGroupType
+          - TaskInstanceSpotCount
+          - TaskInstanceVolumeSize
+          - DriverInstanceGroupCount
+          - DriverInstanceGroupType
+          - DriverInstanceVolumeSize
+      - Label:
+          default: "Spark Configuration Parameters"
+        Parameters:
+          - ExecutorCores
+          - ExecutorsPerNode
+          - DriverCores
+          - DriverMemory
+          - ExecutorMemory
+          - ExecutorMemoryOverhead
+          - ShufflePartitions
+          - DynamicAllocation
+      - Label:
+          default: "DAS End-to-end Run Parameters"
+        Parameters:
+          - DasName
+          - DataSource
+          - RunConfiguration
+          - ProductLine
+          - SingleState
+          - States
+          - ValidateMDF
+          - RunMetrics
+          - InitiateTransfer
+          - ShutdownOnCompletion
+          - RunNumber
+          - GenerateCertificate
+          - GurobiBootstrap
+          - DryRun
+          - SkipSelfTest
+          - EnableErrorMetrics
+          - ProductionMode
+      - Label:
+          default: "DAS End-to-end Run Custom Options"
+        Parameters:
+          - GitBranch
+          - CustomParameter01
+          - CustomValue01
+          - CustomParameter02
+          - CustomValue02
+          - CustomParameter03
+          - CustomValue03
+          - CustomParameter04
+          - CustomValue04
+          - CustomParameter05
+          - CustomValue05
+
+Parameters:
+  ProductLine:
+    Description: Type of DAS Product being produced
+    Type: String
+    Default: PL94
+    AllowedValues:
+      - PL94
+      - DHC
+  RunType:
+    Description: Type of DAS run to be performed - determines data storage locations and lifecycle policy
+    Type: String
+    Default: "Testing"
+    AllowedValues:
+      - Testing
+      - Development
+      - GroupII_dev
+      - Experiments_PL
+      - Experiments_DHC
+      - Experiments_GroupII
+      - Production_PL
+      - Production_DHC
+      - Demonstration_PL
+      - Demonstration_DHC
+      - Demonstration_GroupII
+      - Science_PL
+      - Science_DHC
+      - Science_GroupII
+      - FP_Guide
+  EnableErrorMetrics:
+    Description: Whether to collect error metrics (Disable only if directed by science team)
+    Type: String
+    Default: "TRUE"
+    AllowedValues:
+      - 'TRUE'
+      - 'FALSE'
+  DryRun:
+    Description: Whether to actually run anything
+    Type: String
+    Default: "FALSE"
+    AllowedValues:
+      - 'TRUE'
+      - 'FALSE'
+  SkipSelfTest:
+    Description: Whether to run the initial self tests
+    Type: String
+    Default: "FALSE"
+    AllowedValues:
+      - 'TRUE'
+      - 'FALSE'
+  GurobiBootstrap:
+    Description: Enable to setup Gurobi via bootstrap. Set to TRUE to configure gurobi on every node during bootstrap. FALSE will setup gurobi to be configured via Spark
+    Type: String
+    Default: "FALSE"
+    AllowedValues:
+      - 'TRUE'
+      - 'FALSE'
+  GenerateCertificate:
+    Description: Enable to generate a Certificate
+    Type: String
+    Default: "FALSE"
+    AllowedValues:
+      - 'TRUE'
+      - 'FALSE'
+  ClusterPurpose:
+    Description: Purpose of the cluster, value appended to the Cluster Name
+    Type: String
+    AllowedPattern: ".+"
+  RunNumber:
+    Description: For jobs run multiple times, the iteration of the run
+    Type: String
+    Default: 'NOT_SET'
+  ProductionMode:
+    Type: String
+    Description: Whether to check that configurations agree with production standards (and fail otherwise)
+    Default: 'OFF'
+    AllowedValues:
+      - 'ON'
+      - 'OFF'
+  Env:
+    Type: String
+    Description: String to use for the Environment
+    Default: ITECB
+    AllowedValues:
+      - ITECB
+      - STGCB
+      - PRDCB
+      - ITECBJENKINS
+      - STGCBJENKINS
+  DiskVolumeSize:
+    Type: Number
+    Description: Size of the disks for all servers in GiB.  Used for non-custom cluster sizes. Must be >= 128 and <= 16384
+    Default: 150
+    MinValue: 128
+    MaxValue: 16384
+  DriverInstanceVolumeSize:
+    Type: Number
+    Description: Size of the disks for the primary node in GiB.  Used for custom clusters only. Must be >= 128 and <= 16384
+    Default: 150
+    MinValue: 128
+    MaxValue: 16384
+  CoreInstanceVolumeSize:
+    Type: Number
+    Description: Size of the disks for the core nodes in GiB.  Used for custom clusters only. Must be >= 128 and <= 16384
+    Default: 150
+    MinValue: 128
+    MaxValue: 16384
+  TaskInstanceVolumeSize:
+    Type: Number
+    Description: Size of the disks for the task nodes in GiB.  Used for custom clusters only. Must be >= 128 and <= 16384
+    Default: 150
+    MinValue: 128
+    MaxValue: 16384
+  NoBootstrap:
+    Type: String
+    Description: Set a flag to disable the bootstrap scripts for debugging purposes
+    Default: 'FALSE'
+    AllowedValues:
+      - 'TRUE'
+      - 'FALSE'
+  PythonReqAll:
+    Description: Whether to install requirements on  all nodes
+    Type: String
+    Default: 'FALSE'
+    AllowedValues:
+      - 'TRUE'
+      - 'FALSE'
+  CustomRequirementFile:
+    Description: Provide a custom python requirements file
+    Type: String
+    Default: ""
+  FSXEnabled:
+    Type: String
+    Description: Whether to enable FSX
+    Default: 'TRUE'
+    AllowedValues:
+      - 'TRUE'
+      - 'FALSE'
+  NeedSAS:
+    Description: Whether to install SAS
+    Type: String
+    Default: 'FALSE'
+    AllowedValues:
+      - 'TRUE'
+      - 'FALSE'
+  NeedSTATA:
+    Description: Whether to install STATA
+    Type: String
+    Default: 'FALSE'
+    AllowedValues:
+      - 'TRUE'
+      - 'FALSE'
+  ExecutorCores:
+    Type: String
+    Description: The number of cores to use on each executor.
+    Default: 40
+  ExecutorsPerNode:
+    Type: String
+    Description: The number of executors running on a single node.
+    Default: 1
+  DriverCores:
+    Type: String
+    Description: Number of cores to use for the driver process.
+    Default: 40
+  DriverMemory:
+    Type: String
+    Description: Amount of memory to use for the driver process, i.e. where SparkContext is initialized, in the same format as JVM memory strings with a size unit suffix ("k", "m", "g" or "t") (e.g. 512m, 2g).
+    Default: 40g
+  ExecutorMemory:
+    Type: String
+    Description: Amount of memory to use per executor process, in the same format as JVM memory strings with a size unit suffix ("k", "m", "g" or "t") (e.g. 512m, 2g).
+    Default: 423g
+  ExecutorMemoryOverhead:
+    Type: String
+    Description: Amount of additional memory to be allocated per executor process, in MiB unless otherwise specified. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc. This tends to grow with the executor size (typically 6-10%). This option is currently supported on YARN and Kubernetes.
+    Default: 330g
+  ShufflePartitions:
+    Type: String
+    Description: The default number of partitions to use when shuffling data for joins or aggregations.
+    Default: 2400
+  DynamicAllocation:
+    Type: String
+    Description: Whether to use dynamic resource allocation, which scales the number of executors registered with this application up and down based on the workload. For more detail, see the description.
+    Default: "FALSE"
+    AllowedValues:
+      - "FALSE"
+      - "TRUE"
+  JBIDTag:
+    Type: String
+    Description: JBID of Cluster Creator
+    Default: 'bond007'
+  Release:
+    Type: String
+    Description: Release ID - Do Not Edit!
+    Default: '088'
+  DASSubnetAZ:
+    Type: String
+    Description: DAS Subnet Zone
+    Default: 1B
+    AllowedValues:
+      - 1A
+      - 1B
+      - 1C
+  JavaVersion:
+    Description: Version of Java to use on EMR
+    Type: String
+    Default: Java17
+    AllowedValues:
+      - Java17
+  ParentStackName:
+    Description: Stack name which should either be blank or be passed from preset parent stack. 
+    Type: String
+    Default: ""
+  ModeOfOperation:
+    Type: String
+    Description: |+
+      - Select mode of operation to run
+    Default: "MODE4: Development Mode"
+    AllowedValues:
+      - "MODE2: Run the DAS to produce the MDF and transfer to POP"
+      - "MODE3: Transfer the MDF and NMF files to Tabulation and EDL"
+      - "MODE4: Development Mode"
+      - "MODE5: PERSONS-PR"
+      - "MODE6: UNITS-PR"
+      - "MODE7: PERSONS-US"
+      - "MODE8: UNITS-US"
+  DasName:
+    Type: String
+    Description: DasName to apply to Step scripts. If GENERATE is supplied, the DasName will be the concatenation of the StackName-ClusterPurpose
+    Default: GENERATE
+    AllowedPattern: ".+"
+  DataSource:
+    Type: String
+    Description: CEF Data Source
+    Default: 2010_CONVERT
+    AllowedValues:
+      - PRODUCTION_2020
+      - PRODUCTION_TEST
+      - 2010
+      - 2010_HDF
+      - 2010_CONVERT
+      - PROTECTED_2010
+      - PROTECTED_2020
+  RunConfiguration:
+    Type: String
+    Description: TDA run configuration (default is production/pl94)
+    Default: 'production/pl94'
+    AllowedValues:
+      - 'production/pl94'
+      - 'production/dhc'
+      - 'testing/pl94'
+      - 'testing/dhc'
+      - 'dhc/ddp2/candidate1'
+      - 'dhc/ddp2/candidate2'
+      - 'dhc/pdp1/experiment1'
+      - 'dhc/pdp1/experiment2'
+      - 'dhc/pdp1/experiment3'
+      - 'dhc/pdp1/experiment4'
+      - 'dhc/pdp1/experiment5'
+      - 'parambootstrap_dhc'
+      - 'parambootstrap_dhc2020'
+  SingleState:
+    Type: String
+    Description: Enter a single state FIP. The DAS will run on that state during Steps 4 and 5 of MODE 2.
+    Default: "72"
+    AllowedValues:
+      - "01"
+      - "02"
+      - "04"
+      - "05"
+      - "06"
+      - "08"
+      - "09"
+      - "10"
+      - "11"
+      - "12"
+      - "13"
+      - "15"
+      - "16"
+      - "17"
+      - "18"
+      - "19"
+      - "20"
+      - "21"
+      - "22"
+      - "23"
+      - "24"
+      - "25"
+      - "26"
+      - "27"
+      - "28"
+      - "29"
+      - "30"
+      - "31"
+      - "32"
+      - "33"
+      - "34"
+      - "35"
+      - "36"
+      - "37"
+      - "38"
+      - "39"
+      - "40"
+      - "41"
+      - "42"
+      - "44"
+      - "45"
+      - "46"
+      - "47"
+      - "48"
+      - "49"
+      - "50"
+      - "51"
+      - "53"
+      - "54"
+      - "55"
+      - "56"
+      - "72"
+  States:
+    Type: String
+    Description: The State FIPs on which to run the DAS. Set to NONE to run on a Single State only which will not run Steps 2 or 3 in MODE 2.
+    Default: '01 02 04 05 06 08 09 10 11 12 13 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 44 45 46 47 48 49 50 51 53 54 55 56'
+  ClusterSize:
+    Type: String
+    Description:
+      Cluster size (Core nodes are pulled from reserved, and spot are dynamically allocated)
+    Default: OnDemand.r6i.8x.10Node
+    AllowedValues:
+      - OnDemand.r6i.2x.MasterOnly
+      - OnDemand.r5.2x.1Node
+      - OnDemand.r6i.8x.2Node
+      - Spot.r6i.8x.5Node
+      - OnDemand.r6i.8x.5Node
+      - Spot.r6i.8x.8Node
+      - OnDemand.r6i.8x.8Node
+      - Spot.r6i.8x.20Node
+      - OnDemand.r6i.8x.10Node
+      - OnDemand.r6i.8x.20Node
+      - OnDemand.r5.24x.2Node
+      - Spot.r5.24x.5Node
+      - OnDemand.r5.24x.5Node
+      - Spot.r5.24x.8Node
+      - OnDemand.r5.24x.8Node
+      - Spot.r5.24x.20Node
+      - OnDemand.r5.24x.20Node
+      - Spot.r5.24x.40Node
+      - OnDemand.r5.24x.40Node
+      - Spot.Custom
+  FriendlyNameTag:
+    Type: String
+    Description: Friendly name to uniquely identify cluster
+    Default: ''
+  CampaignNameTag:
+    Type: String
+    Description: Campaign name to uniquely identify a group or collection of runs / missions
+    Default: ''
+  POCTag:
+    Type: String
+    Description: Please enter the Primary Point of Contact for this Cluster (In the event that it is being evaluated for termination)
+    Default: ''
+  ApplicationTag:
+    Type: String
+    Description: String to use for the Application tag
+    Default: DAS
+  ValidateMDF:
+    Type: String
+    Description: Set to "TRUE" to validate the output MDF
+    Default: "TRUE"
+    AllowedValues:
+      - "FALSE"
+      - "TRUE"
+  RunMetrics:
+    Type: String
+    Description: Set to "TRUE" to Execute DHC Metrics and if the RunConfiguration is a DHC.
+    Default: "FALSE"
+    AllowedValues:
+      - "FALSE"
+      - "TRUE"
+  InitiateTransfer:
+    Type: String
+    Description: Set to "TRUE" to automatically initiate a transfer of the MDF to EDL and Tabulation, and initiate transfer of the NMF to EDL
+    Default: "FALSE"
+    AllowedValues:
+      - "FALSE"
+      - "TRUE"
+  ShutdownOnCompletion:
+    Type: String
+    Description: "TRUE to shut down cluster after successful completion of the DAS"
+    Default: "TRUE"
+    AllowedValues:
+      - "FALSE"
+      - "TRUE"
+  DriverInstanceGroupType:
+    Type: String
+    Description: EC2 instance type for the Driver Group
+    Default: r5.24xlarge
+  CoreInstanceGroupType:
+    Type: String
+    Description: EC2 instance type for the Core Group
+    Default: r5.24xlarge
+  TaskInstanceGroupType:
+    Type: String
+    Description: EC2 instance type for the Task Group
+    Default: r5.24xlarge
+  CoreInstanceGroupCount:
+    Type: Number
+    Description: Number of EC2 instances in the Core Instance group - uses nodes from available capacity
+    Default: 2
+  DriverInstanceGroupCount:
+    Type: Number
+    Description: Number of EC2 instances in the Driver Instance group
+    Default: 1
+  TaskInstanceOnDemandCount:
+    Type: Number
+    Description: Number of EC2 instances in the Task Instance group of On Demand - requests nodes through spot pricing.  If none available, the cluster will terminate during resizing.
+    Default: 0
+  TaskInstanceSpotCount:
+    Type: Number
+    Description: Number of EC2 instances in the Task Instance group of Spot - requests nodes through spot pricing.  If none available, the cluster will terminate during resizing.
+    Default: 0
+  EmrVersion:
+    Type: String
+    Description: EMR Release Version
+    Default: "emr-6.15.0"
+    AllowedValues:
+      - "emr-6.15.0"
+      - "emr-7.5.0"
+  AMIVersion:
+    Type: String
+    Description: Custom AMI version for testing purposes
+    Default: ""
+  WebhookVersion:
+    Type: String
+    Description: Custom Webhook version for testing purposes
+    Default: ""
+  GitBranch:
+    Type: String
+    Description: A user defined branch that will be utilized during the experiment run.  This will pull the latest from the branch on Github.  If left empty the default branch will be utilized from the release.
+    Default: ''
+  CustomParameter01:
+    Type: String
+    Description: Custom Parameter (01) Name with format section:option
+    Default: ""
+  CustomValue01:
+    Type: String
+    Description: Custom Paramter (01) value(s).  Allows for space seperated values that will be used to generate multiple experiments with permutations of experiment sets.
+    Default: ""
+  CustomParameter02:
+    Type: String
+    Description: Custom Parameter (02) Name with format section:option
+    Default: ""
+  CustomValue02:
+    Type: String
+    Description: Custom Paramter (02) value(s).  Allows for space seperated values that will be used to generate multiple experiments with permutations of experiment sets.
+    Default: ""
+  CustomParameter03:
+    Type: String
+    Description: Custom Parameter (03) Name with format section:option
+    Default: ""
+  CustomValue03:
+    Type: String
+    Description: Custom Paramter (03) value(s).  Allows for space seperated values that will be used to generate multiple experiments with permutations of experiment sets.
+    Default: ""
+  CustomParameter04:
+    Type: String
+    Description: Custom Parameter (04) Name with format section:option
+    Default: ""
+  CustomValue04:
+    Type: String
+    Description: Custom Paramter (04) value(s).  Allows for space seperated values that will be used to generate multiple experiments with permutations of experiment sets.
+    Default: ""
+  CustomParameter05:
+    Type: String
+    Description: Custom Parameter (05) Name with format section:option
+    Default: ""
+  CustomValue05:
+    Type: String
+    Description: Custom Paramter (05) value(s).  Allows for space seperated values that will be used to generate multiple experiments with permutations of experiment sets.
+    Default: ""
+  ProductValue:
+    Type: String
+    Description: The type of product run for this project.
+    AllowedPattern: ".+"
+    AllowedValues:
+      - dhc
+      - pl94
+      - s-dhc
+      - s-dhcexperimental
+      - ddhc-a
+      - ddhc-b
+      - ep
+      - specialcensus
+      - tumult-training
+      - 2030research
+      - recon-reid
+      - other
+  TeamValue:
+    Type: String
+    Description: The team that is running this project.
+    Default: "science"
+    AllowedPattern: ".+"
+    AllowedValues:
+      - science
+      - engineering
+      - infrastructure
+      - galois
+      - other
+  ProjectPurpose:
+    Type: String
+    Description: "Describe the activity being performed. Some examples are: 
+    dp-quantiles, alternative-solver, recon-reid, release-testing, synthetic-validation, or production-run."
+    AllowedPattern: ".+"
+  JupyterEnabled:
+    Type: String
+    Description: Whether to enable Jupyter
+    Default: 'FALSE'
+    AllowedValues:
+      - 'TRUE'
+      - 'FALSE'
+  AutokillExempt:
+    Type: String
+    Description: If enabled, Autokill will skip this cluster.
+    Default: 'FALSE'
+    AllowedValues:
+      - 'TRUE'
+      - 'FALSE'
+
+Conditions:
+  IsMode2: !Equals [!Select [0, !Split [":", !Ref ModeOfOperation]], "MODE2"]
+  IsMode3: !Equals [!Select [0, !Split [":", !Ref ModeOfOperation]], "MODE3"]
+  IsMode4: !Equals [!Select [0, !Split [":", !Ref ModeOfOperation]], "MODE4"]
+  IsMode5: !Equals [!Select [0, !Split [":", !Ref ModeOfOperation]], "MODE5"]
+  IsMode6: !Equals [!Select [0, !Split [":", !Ref ModeOfOperation]], "MODE6"]
+  IsMode7: !Equals [!Select [0, !Split [":", !Ref ModeOfOperation]], "MODE7"]
+  IsMode8: !Equals [!Select [0, !Split [":", !Ref ModeOfOperation]], "MODE8"]
+  IsDHC:  !Equals [!Ref ProductLine, "DHC"]
+  IsPL94: !Equals [!Ref ProductLine, "PL94"]
+  IsDryRun: !Equals [!Ref DryRun, "TRUE"]
+  IsCustom: !Equals [!Ref ClusterSize, "Spot.Custom"]
+  GenerateDasName: !Equals [!Ref DasName, "GENERATE"]
+  StackNameNotPassed: !Equals [!Ref "ParentStackName", ""]
+  IsStatesNotDefined: !Equals [!Ref States, ""]
+  IsAMINotDefined: !Equals [!Ref AMIVersion, ""]
+  IsWebhookNotDefined: !Equals [!Ref WebhookVersion, ""]
+  IsBranchNotDefined: !Equals [!Ref GitBranch, ""]
+  IsCustomParameter01_NotDefined: !Equals [!Ref CustomParameter01, ""]
+  IsCustomParameter02_NotDefined: !Equals [!Ref CustomParameter02, ""]
+  IsCustomParameter03_NotDefined: !Equals [!Ref CustomParameter03, ""]
+  IsCustomParameter04_NotDefined: !Equals [!Ref CustomParameter04, ""]
+  IsCustomParameter05_NotDefined: !Equals [!Ref CustomParameter05, ""]
+  IsCustomRequirementFile_NotDefined: !Equals [!Ref CustomRequirementFile, ""]
+  IsJupyterEnabled: !And [!Condition IsMode4, !Equals [!Ref JupyterEnabled, "TRUE"]]
+  RUN_Step_SelfTest: !And [!Or [!Condition IsMode2, !Condition IsMode5, !Condition IsMode6, !Condition IsMode7, !Condition IsMode8], !Not [!Equals [!Ref SkipSelfTest, "TRUE"]]]
+  RUN_Step_CEF_Validation: !Or [!Condition IsMode2, !Condition IsMode5, !Condition IsMode6, !Condition IsMode7, !Condition IsMode8]
+  RUN_Step_TDA_PR_Persons: !Or [!Condition IsMode2, !Condition IsMode5]
+  RUN_Step_TDA_PR_Units: !Or [!Condition IsMode2, !Condition IsMode6]
+  RUN_Step_TDA_US_Persons: !Or [!Condition IsMode2, !Condition IsMode7]
+  RUN_Step_TDA_US_Units: !Or [!Condition IsMode2, !Condition IsMode8]
+  RUN_Step_MDF_Concatenation: !And [!Condition IsMode2, !Not [!Condition IsDryRun]]
+  RUN_Step_MDF_Validation_Person: !And [!Condition IsMode2, !Equals [!Ref ValidateMDF, "TRUE"], !Not [!Condition IsDryRun]]
+  RUN_Step_MDF_Validation_Unit: !And [!Condition IsMode2, !Equals [!Ref ValidateMDF, "TRUE"], !Not [!Condition IsDryRun]]
+  RUN_Step_MDF_Transfer_to_POP: !And [!Condition IsMode2, !Not [!Condition IsDryRun], !Equals [!Ref InitiateTransfer, "TRUE"]]
+  RUN_Step_MDF_Transfer_to_TAB: !Or [
+    !And [!Condition IsMode2, !Condition IsDHC, !Not [!Condition IsDryRun],
+          !Equals [!Ref InitiateTransfer, "TRUE"]],
+    !And [!Condition IsMode3, !Condition IsPL94, !Not [!Condition IsDryRun],
+          !Equals [!Ref InitiateTransfer, "TRUE"]]]
+  RUN_Step_MDF_Transfer_to_EDL: !And [!Condition IsMode3, !Not [!Condition IsDryRun], !Equals [!Ref InitiateTransfer, "TRUE"]]
+  RUN_Step_LightsOut: !Or [!Condition IsMode2, !Condition IsMode3, !Condition IsMode5, !Condition IsMode6, !Condition IsMode7, !Condition IsMode8]
+  RUN_DHC_METRICS: !And [!Condition IsMode2, !Equals [!Ref RunMetrics, "TRUE"], !Condition IsDHC]
+  RUN_GENERATE_CERTIFICATE: !And [!Condition IsMode2, !Equals [!Ref GenerateCertificate, "TRUE"]]
+  RUN_GUROBI_BOOTSTRAP: !Equals [!Ref GurobiBootstrap, "TRUE"]
+
+Mappings:
+  ClusterConfig:
+    OnDemand.r6i.2x.MasterOnly:
+      TaskInstanceOnDemandCount: 0                  # Number of EC2 instances in the On-Demand Task Instance group.
+      TaskInstanceSpotCount: 0                      # Number of EC2 instances in the Spot Task Instance group.
+      DriverInstanceGroupCount: 1                   # Number of EC2 instances in the Driver Instance group.
+      CoreInstanceGroupCount: 0                     # Number of EC2 instances in the Core Instance group.
+      DriverInstanceSize: r6i.2xlarge
+      TaskInstanceSize: r6i.2xlarge
+      CoreInstanceSize: r6i.2xlarge
+    OnDemand.r5.2x.1Node:
+      TaskInstanceOnDemandCount: 0                  # Number of EC2 instances in the On-Demand Task Instance group.
+      TaskInstanceSpotCount: 0                      # Number of EC2 instances in the Spot Task Instance group.
+      DriverInstanceGroupCount: 1                   # Number of EC2 instances in the Driver Instance group.
+      CoreInstanceGroupCount: 1                     # Number of EC2 instances in the Core Instance group.
+      DriverInstanceSize: r5.2xlarge
+      TaskInstanceSize: r5.2xlarge
+      CoreInstanceSize: r5.2xlarge
+    OnDemand.r6i.8x.2Node:
+      TaskInstanceOnDemandCount: 0                  # Number of EC2 instances in the On-Demand Task Instance group.
+      TaskInstanceSpotCount: 0                      # Number of EC2 instances in the Spot Task Instance group.
+      DriverInstanceGroupCount: 1                   # Number of EC2 instances in the Driver Instance group.
+      CoreInstanceGroupCount: 2                     # Number of EC2 instances in the Core Instance group.
+      DriverInstanceSize: r6i.8xlarge
+      TaskInstanceSize: r6i.8xlarge
+      CoreInstanceSize: r6i.8xlarge
+    OnDemand.r6i.8x.5Node:
+      TaskInstanceOnDemandCount: 3                  # Number of EC2 instances in the On-Demand Task Instance group.
+      TaskInstanceSpotCount: 0                      # Number of EC2 instances in the Spot Task Instance group.
+      DriverInstanceGroupCount: 1                   # Number of EC2 instances in the Driver Instance group.
+      CoreInstanceGroupCount: 2                     # Number of EC2 instances in the Core Instance group.
+      DriverInstanceSize: r6i.8xlarge
+      TaskInstanceSize: r6i.8xlarge
+      CoreInstanceSize: r6i.8xlarge
+    OnDemand.r6i.8x.8Node:
+      TaskInstanceOnDemandCount: 6                  # Number of EC2 instances in the On-Demand Task Instance group.
+      TaskInstanceSpotCount: 0                      # Number of EC2 instances in the Spot Task Instance group.
+      DriverInstanceGroupCount: 1                   # Number of EC2 instances in the Driver Instance group.
+      CoreInstanceGroupCount: 2                     # Number of EC2 instances in the Core Instance group.
+      DriverInstanceSize: r6i.8xlarge
+      TaskInstanceSize: r6i.8xlarge
+      CoreInstanceSize: r6i.8xlarge
+    OnDemand.r6i.8x.10Node:
+      TaskInstanceOnDemandCount: 8                  # Number of EC2 instances in the On-Demand Task Instance group.
+      TaskInstanceSpotCount: 0                      # Number of EC2 instances in the Spot Task Instance group.
+      DriverInstanceGroupCount: 1                   # Number of EC2 instances in the Driver Instance group.
+      CoreInstanceGroupCount: 2                     # Number of EC2 instances in the Core Instance group.
+      DriverInstanceSize: r6i.8xlarge
+      TaskInstanceSize: r6i.8xlarge
+      CoreInstanceSize: r6i.8xlarge
+    OnDemand.r6i.8x.20Node:
+      TaskInstanceOnDemandCount: 18                 # Number of EC2 instances in the On-Demand Task Instance group.
+      TaskInstanceSpotCount: 0                      # Number of EC2 instances in the Spot Task Instance group.
+      DriverInstanceGroupCount: 1                   # Number of EC2 instances in the Driver Instance group.
+      CoreInstanceGroupCount: 2                     # Number of EC2 instances in the Core Instance group.
+      DriverInstanceSize: r6i.8xlarge
+      TaskInstanceSize: r6i.8xlarge
+      CoreInstanceSize: r6i.8xlarge
+    Spot.r6i.8x.5Node:
+      TaskInstanceOnDemandCount: 0                  # Number of EC2 instances in the On-Demand Task Instance group.
+      TaskInstanceSpotCount: 3                      # Number of EC2 instances in the Spot Task Instance group.
+      DriverInstanceGroupCount: 1                   # Number of EC2 instances in the Driver Instance group.
+      CoreInstanceGroupCount: 2                     # Number of EC2 instances in the Core Instance group.
+      DriverInstanceSize: r6i.8xlarge
+      TaskInstanceSize: r6i.8xlarge
+      CoreInstanceSize: r6i.8xlarge
+    Spot.r6i.8x.8Node:
+      TaskInstanceOnDemandCount: 0                  # Number of EC2 instances in the On-Demand Task Instance group.
+      TaskInstanceSpotCount: 6                      # Number of EC2 instances in the Spot Task Instance group.
+      DriverInstanceGroupCount: 1                   # Number of EC2 instances in the Driver Instance group.
+      CoreInstanceGroupCount: 2                     # Number of EC2 instances in the Core Instance group.
+      DriverInstanceSize: r6i.8xlarge
+      TaskInstanceSize: r6i.8xlarge
+      CoreInstanceSize: r6i.8xlarge
+    Spot.r6i.8x.20Node:
+      TaskInstanceOnDemandCount: 0                  # Number of EC2 instances in the On-Demand Task Instance group.
+      TaskInstanceSpotCount: 18                     # Number of EC2 instances in the Spot Task Instance group.
+      DriverInstanceGroupCount: 1                   # Number of EC2 instances in the Driver Instance group.
+      CoreInstanceGroupCount: 2                     # Number of EC2 instances in the Core Instance group.
+      DriverInstanceSize: r6i.8xlarge
+      TaskInstanceSize: r6i.8xlarge
+      CoreInstanceSize: r6i.8xlarge
+    OnDemand.r5.24x.2Node:
+      TaskInstanceOnDemandCount: 0                  # Number of EC2 instances in the On-Demand Task Instance group.
+      TaskInstanceSpotCount: 0                      # Number of EC2 instances in the Spot Task Instance group.
+      DriverInstanceGroupCount: 1                   # Number of EC2 instances in the Driver Instance group.
+      CoreInstanceGroupCount: 2                     # Number of EC2 instances in the Core Instance group.
+      DriverInstanceSize: r5.24xlarge
+      TaskInstanceSize: r5.24xlarge
+      CoreInstanceSize: r5.24xlarge
+    Spot.r5.24x.5Node:
+      TaskInstanceOnDemandCount: 0                  # Number of EC2 instances in the On-Demand Task Instance group.
+      TaskInstanceSpotCount: 3                      # Number of EC2 instances in the Spot Task Instance group.
+      DriverInstanceGroupCount: 1                   # Number of EC2 instances in the Driver Instance group.
+      CoreInstanceGroupCount: 2                     # Number of EC2 instances in the Core Instance group.
+      DriverInstanceSize: r5.24xlarge
+      TaskInstanceSize: r5.24xlarge
+      CoreInstanceSize: r5.24xlarge
+    OnDemand.r5.24x.5Node:
+      TaskInstanceOnDemandCount: 3                  # Number of EC2 instances in the On-Demand Task Instance group.
+      TaskInstanceSpotCount: 0                      # Number of EC2 instances in the Spot Task Instance group.
+      DriverInstanceGroupCount: 1                   # Number of EC2 instances in the Driver Instance group.
+      CoreInstanceGroupCount: 2                     # Number of EC2 instances in the Core Instance group.
+      DriverInstanceSize: r5.24xlarge
+      TaskInstanceSize: r5.24xlarge
+      CoreInstanceSize: r5.24xlarge
+    Spot.r5.24x.8Node:
+      TaskInstanceOnDemandCount: 0                  # Number of EC2 instances in the On-Demand Task Instance group.
+      TaskInstanceSpotCount: 6                      # Number of EC2 instances in the Spot Task Instance group.
+      DriverInstanceGroupCount: 1                   # Number of EC2 instances in the Driver Instance group.
+      CoreInstanceGroupCount: 2                     # Number of EC2 instances in the Core Instance group.
+      DriverInstanceSize: r5.24xlarge
+      TaskInstanceSize: r5.24xlarge
+      CoreInstanceSize: r5.24xlarge
+    OnDemand.r5.24x.8Node:
+      TaskInstanceOnDemandCount: 6                  # Number of EC2 instances in the On-Demand Task Instance group.
+      TaskInstanceSpotCount: 0                      # Number of EC2 instances in the Spot Task Instance group.
+      DriverInstanceGroupCount: 1                   # Number of EC2 instances in the Driver Instance group.
+      CoreInstanceGroupCount: 2                     # Number of EC2 instances in the Core Instance group.
+      DriverInstanceSize: r5.24xlarge
+      TaskInstanceSize: r5.24xlarge
+      CoreInstanceSize: r5.24xlarge
+    Spot.r5.24x.20Node:
+      TaskInstanceOnDemandCount: 0                  # Number of EC2 instances in the On-Demand Task Instance group.
+      TaskInstanceSpotCount: 18                     # Number of EC2 instances in the Spot Task Instance group.
+      DriverInstanceGroupCount: 1                   # Number of EC2 instances in the Driver Instance group.
+      CoreInstanceGroupCount: 2                     # Number of EC2 instances in the Core Instance group.
+      DriverInstanceSize: r5.24xlarge
+      TaskInstanceSize: r5.24xlarge
+      CoreInstanceSize: r5.24xlarge
+    OnDemand.r5.24x.20Node:
+      TaskInstanceOnDemandCount: 18                 # Number of EC2 instances in the On-Demand Task Instance group.
+      TaskInstanceSpotCount: 0                      # Number of EC2 instances in the Spot Task Instance group.
+      DriverInstanceGroupCount: 1                   # Number of EC2 instances in the Driver Instance group.
+      CoreInstanceGroupCount: 2                     # Number of EC2 instances in the Core Instance group.
+      DriverInstanceSize: r5.24xlarge
+      TaskInstanceSize: r5.24xlarge
+      CoreInstanceSize: r5.24xlarge
+    Spot.r5.24x.40Node:
+      TaskInstanceOnDemandCount: 0                  # Number of EC2 instances in the On-Demand Task Instance group.
+      TaskInstanceSpotCount: 38                     # Number of EC2 instances in the Spot Task Instance group.
+      DriverInstanceGroupCount: 1                   # Number of EC2 instances in the Driver Instance group.
+      CoreInstanceGroupCount: 2                     # Number of EC2 instances in the Core Instance group.
+      DriverInstanceSize: r5.24xlarge
+      TaskInstanceSize: r5.24xlarge
+      CoreInstanceSize: r5.24xlarge
+    OnDemand.r5.24x.40Node:
+      TaskInstanceOnDemandCount: 38                 # Number of EC2 instances in the On-Demand Task Instance group.
+      TaskInstanceSpotCount: 0                      # Number of EC2 instances in the Spot Task Instance group.
+      DriverInstanceGroupCount: 1                   # Number of EC2 instances in the Driver Instance group.
+      CoreInstanceGroupCount: 2                     # Number of EC2 instances in the Core Instance group.
+      DriverInstanceSize: r5.24xlarge
+      TaskInstanceSize: r5.24xlarge
+      CoreInstanceSize: r5.24xlarge
+    Spot.Custom:
+      TaskInstanceOnDemandCount: 0                  # Number of EC2 instances in the On-Demand Task Instance group.
+      TaskInstanceSpotCount: 0                      # Number of EC2 instances in the Spot Task Instance group.
+      DriverInstanceGroupCount: 0                   # Number of EC2 instances in the Driver Instance group.
+      CoreInstanceGroupCount: 0                     # Number of EC2 instances in the Core Instance group.
+      DriverInstanceSize: r5.24xlarge
+      TaskInstanceSize: r5.24xlarge
+      CoreInstanceSize: r5.24xlarge
+  EnvInfo:
+    ITECB:
+      S3URL: DASITES3MgmtUri 
+      StepCR: iteEMRStepCRLambdaArn
+    STGCB:
+      S3URL: DASSTAGES3MgmtUri
+      StepCR: stgEMRStepCRLambdaArn
+    PRDCB:
+      S3URL: DASPRODS3MgmtUri
+      StepCR: prdEMRStepCRLambdaArn
+    ITECBJENKINS:
+      S3URL: DASITES3MgmtUri
+      StepCR: iteEMRStepCRLambdaArn
+    STGCBJENKINS:
+      S3URL: DASSTAGES3MgmtUri
+      StepCR: stgEMRStepCRLambdaArn
+
+Resources:
+
+  DasNameCR:
+    Type: Custom::DASName
+    Properties:
+      ServiceToken: !ImportValue CustomResVarLambdaArn
+      Name: !If
+        - GenerateDasName
+        - !Sub
+          - 'DAS-${ProductLine}-${Env}-${Release}-${FriendlyNameTag}-${TheClusterPurpose}'
+          - {TheClusterPurpose: !Join ['-', !Split [' ', !Ref ClusterPurpose]]}
+        - !Sub ${DasName}
+
+  ProjectRoleCR:
+    Type: Custom::DASName
+    Properties:
+      ServiceToken: !ImportValue CustomResVarLambdaArn
+      Name: !Sub 'ti2cet_das_${ProductValue}_${TeamValue}_${ProjectPurpose}'
+
+  Args:
+    Type: Custom::Args
+    Properties:
+      ServiceToken: !ImportValue CustomResVarLambdaArn
+      StandardArgs:
+        - "--DasName"
+        - !GetAtt DasNameCR.Name
+        - "--DataSource"
+        - !Sub ${DataSource}
+        - "--RunConfiguration"
+        - !Sub ${RunConfiguration}
+        - "--SingleState"
+        - !Sub ${SingleState}
+        - "--DasProductLine" 
+        - !Sub ${ProductLine}
+        - "--States"
+        - !If
+          - IsStatesNotDefined
+          - "NONE"
+          - !Sub "${States}"
+        - "--ExecutorCores"
+        - !Sub "${ExecutorCores}"
+        - "--ExecutorsPerNode"
+        - !Sub "${ExecutorsPerNode}"
+        - "--DriverCores"
+        - !Sub "${DriverCores}"
+        - "--DriverMemory"
+        - !Sub "${DriverMemory}"
+        - "--ExecutorMemory"
+        - !Sub "${ExecutorMemory}"
+        - "--ExecutorMemoryOverhead"
+        - !Sub "${ExecutorMemoryOverhead}"
+        - "--ShufflePartitions"
+        - !Sub "${ShufflePartitions}"
+        - "--DynamicAllocation"
+        - !Sub "${DynamicAllocation}"
+        - "--RunNumber"
+        - !Ref RunNumber
+        - !If
+          - IsBranchNotDefined
+          - Ref: AWS::NoValue
+          - "--UserDefinedGitBranch"
+        - !If
+          - IsBranchNotDefined
+          - Ref: AWS::NoValue
+          - !Sub "${GitBranch}"
+        - !If
+          - IsCustomParameter01_NotDefined
+          - !Ref "AWS::NoValue"
+          - "--CustomParameter01"
+        - !If
+          - IsCustomParameter01_NotDefined
+          - !Ref "AWS::NoValue"
+          - !Sub "${CustomParameter01}"
+        - !If
+          - IsCustomParameter01_NotDefined
+          - !Ref "AWS::NoValue"
+          - "--CustomValue01"
+        - !If
+          - IsCustomParameter01_NotDefined
+          - !Ref "AWS::NoValue"
+          - !Sub "${CustomValue01}"
+        - !If
+          - IsCustomParameter02_NotDefined
+          - !Ref "AWS::NoValue"
+          - "--CustomParameter02"
+        - !If
+          - IsCustomParameter02_NotDefined
+          - !Ref "AWS::NoValue"
+          - !Sub "${CustomParameter02}"
+        - !If
+          - IsCustomParameter02_NotDefined
+          - !Ref "AWS::NoValue"
+          - "--CustomValue02"
+        - !If
+          - IsCustomParameter02_NotDefined
+          - !Ref "AWS::NoValue"
+          - !Sub "${CustomValue02}"
+        - !If
+          - IsCustomParameter03_NotDefined
+          - !Ref "AWS::NoValue"
+          - "--CustomParameter03"
+        - !If
+          - IsCustomParameter03_NotDefined
+          - !Ref "AWS::NoValue"
+          - !Sub "${CustomParameter03}"
+        - !If
+          - IsCustomParameter03_NotDefined
+          - !Ref "AWS::NoValue"
+          - "--CustomValue03"
+        - !If
+          - IsCustomParameter03_NotDefined
+          - !Ref "AWS::NoValue"
+          - !Sub "${CustomValue03}"
+        - !If
+          - IsCustomParameter04_NotDefined
+          - !Ref "AWS::NoValue"
+          - "--CustomParameter04"
+        - !If
+          - IsCustomParameter04_NotDefined
+          - !Ref "AWS::NoValue"
+          - !Sub "${CustomParameter04}"
+        - !If
+          - IsCustomParameter04_NotDefined
+          - !Ref "AWS::NoValue"
+          - "--CustomValue04"
+        - !If
+          - IsCustomParameter04_NotDefined
+          - !Ref "AWS::NoValue"
+          - !Sub "${CustomValue04}"
+        - !If
+          - IsCustomParameter05_NotDefined
+          - !Ref "AWS::NoValue"
+          - "--CustomParameter05"
+        - !If
+          - IsCustomParameter05_NotDefined
+          - !Ref "AWS::NoValue"
+          - !Sub "${CustomParameter05}"
+        - !If
+          - IsCustomParameter05_NotDefined
+          - !Ref "AWS::NoValue"
+          - "--CustomValue05"
+        - !If
+          - IsCustomParameter05_NotDefined
+          - !Ref "AWS::NoValue"
+          - !Sub "${CustomValue05}"
+        - "--RunType"
+        - !Sub "${RunType}"
+        - !If
+          - IsDryRun
+          - "--DryRun"
+          - Ref: AWS::NoValue
+        - "--DhcErrorMetricsEnabled"
+        - !Ref EnableErrorMetrics
+        - "--InitiateTransfer"
+        - !Sub "${InitiateTransfer}"
+        - "--ShutdownOnCompletion"
+        - !Sub "${ShutdownOnCompletion}"
+        - !If
+          - IsCustomRequirementFile_NotDefined
+          - !Ref "AWS::NoValue"
+          - "--CustomRequirementFile"
+        - !If
+          - IsCustomRequirementFile_NotDefined
+          - !Ref "AWS::NoValue"
+          - !Sub "${CustomRequirementFile}"
+
+  # This nested stack calls for the DAS_Common.yaml, which runs the bootstrap and sets up the
+  # cluster for further use. It outputs the cluster id.
+  CommonStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub
+        - '${TemplateLocation}/release/${Release}/DAS_Common.yaml'
+        - TemplateLocation: 
+            Fn::ImportValue: !FindInMap [EnvInfo, !Ref Env, S3URL]
+      Parameters:
+        ApplicationTag: !Ref ApplicationTag
+        StackName: !If 
+          - StackNameNotPassed
+          - !Ref AWS::StackName
+          - !Ref ParentStackName
+        CampaignNameTag: !Ref CampaignNameTag
+        ClusterPurpose: !Ref ClusterPurpose
+        CoreInstanceGroupCount: !If
+          - IsCustom
+          - !Ref CoreInstanceGroupCount
+          - !FindInMap [ClusterConfig, !Ref ClusterSize, CoreInstanceGroupCount]
+        CoreInstanceSize: !If
+          - IsCustom
+          - !Ref CoreInstanceGroupType
+          - !FindInMap [ClusterConfig, !Ref ClusterSize, CoreInstanceSize]
+        CoreInstanceVolumeSize: !If
+          - IsCustom
+          - !Ref CoreInstanceVolumeSize
+          - !Ref DiskVolumeSize
+        DASSubnetAZ: !Ref DASSubnetAZ
+        DasName: !GetAtt DasNameCR.Name
+        DataSource: !Ref DataSource
+        DriverInstanceGroupCount: !If
+          - IsCustom
+          - !Ref DriverInstanceGroupCount
+          - !FindInMap [ClusterConfig, !Ref ClusterSize, DriverInstanceGroupCount]
+        DriverInstanceSize: !If
+          - IsCustom
+          - !Ref DriverInstanceGroupType
+          - !FindInMap [ClusterConfig, !Ref ClusterSize, DriverInstanceSize]
+        DriverInstanceVolumeSize: !If
+          - IsCustom
+          - !Ref DriverInstanceVolumeSize
+          - !Ref DiskVolumeSize
+        EmrAMI: !If
+          - IsAMINotDefined
+          - !Ref "AWS::NoValue"
+          - !Ref AMIVersion
+        Webhook: !If
+          - IsWebhookNotDefined
+          - !Ref "AWS::NoValue"
+          - !Ref WebhookVersion
+        EmrVersion: !Ref EmrVersion
+        Env: !Ref Env
+        FriendlyNameTag: !Ref FriendlyNameTag
+        InstallRPackage: "FALSE"
+        JBIDTag: !Ref JBIDTag
+        GurobiBootstrap: !Ref GurobiBootstrap
+        LightsOut: !If
+          - RUN_Step_LightsOut
+          - TRUE
+          - FALSE
+        PythonReqAll: !Ref PythonReqAll
+        CustomRequirementFile: !Ref CustomRequirementFile
+        FSXEnabled: !Ref FSXEnabled
+        JavaVersion: !Ref JavaVersion
+        NeedSAS: !Ref NeedSAS
+        NeedSTATA: !Ref NeedSTATA
+        NoBootstrap: !Ref NoBootstrap
+        POCTag: !Ref POCTag
+        ProductionMode: !Ref ProductionMode
+        ProductLine: !Ref ProductLine
+        ProjectRole: !GetAtt ProjectRoleCR.Name
+        Release: !Ref Release
+        RunType: !Ref RunType
+        TaskInstanceOnDemandCount: !If
+          - IsCustom
+          - !Ref TaskInstanceOnDemandCount
+          - !FindInMap [ClusterConfig, !Ref ClusterSize, TaskInstanceOnDemandCount]
+        TaskInstanceSize: !If
+          - IsCustom
+          - !Ref TaskInstanceGroupType
+          - !FindInMap [ClusterConfig, !Ref ClusterSize, TaskInstanceSize]
+        TaskInstanceSpotCount: !If
+          - IsCustom
+          - !Ref TaskInstanceSpotCount
+          - !FindInMap [ClusterConfig, !Ref ClusterSize, TaskInstanceSpotCount]
+        TaskInstanceVolumeSize: !If
+          - IsCustom
+          - !Ref TaskInstanceVolumeSize
+          - !Ref DiskVolumeSize
+        AutokillExempt: !Ref AutokillExempt
+
+
+  StepSetupPython:
+    Type: Custom::EMRSteps
+    Properties:
+      StepName: "Step 0 - Setup Python"
+      ClusterID: !GetAtt CommonStack.Outputs.DASSpotClusterId
+      ServiceToken:
+        Fn::ImportValue: !FindInMap [ EnvInfo, !Ref Env, StepCR ]
+      ActionOnFailure: CANCEL_AND_WAIT
+      CreateStep: "TRUE"
+      ScriptName: "/mnt/gits/das-vm-config/DAS-Step-PythonSetup.sh"
+      Args: !Split [ ",", !GetAtt Args.StandardArgs ]
