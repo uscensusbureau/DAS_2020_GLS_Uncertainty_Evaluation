@@ -62,8 +62,6 @@ CALL_ESTIMATE_CIS = True
 # The remaining options will generally not need to be changed:
 ##########
 TABULATION_SPINE_GEODICT = {0: "US", 2: "State", 5: "County", 11: "Tract", 12:"Block_Group", 16: "Block"}
-
-GRFC_PATH = "s3://v-s3-das-prod-sourcedata-412241963457-us-gov-west-1/grfc/2020/grfc"
 PARTITION_SIZE = 4
 
 # The number of non-unique characters that are added to each query name in the NMFs. For example, for the released NMFs, we
