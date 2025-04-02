@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Sep 12 11:26:11 2023
-
-@author: cumin002
-"""
-
 import numpy as np
 from copy import deepcopy
 
