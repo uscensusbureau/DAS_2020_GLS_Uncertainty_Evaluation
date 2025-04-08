@@ -27,7 +27,6 @@ from GLS.das_decennial.programs.schema.attributes.hhgq1940 import HHGQ1940Attr a
 from GLS.das_decennial.programs.schema.attributes.age1940 import Age1940Attr as AGE_1940
 from GLS.das_decennial.programs.schema.attributes.sex1940 import Sex1940Attr as SEX_1940
 from GLS.das_decennial.programs.schema.attributes.hisp1940 import Hispanic1940Attr as HISPANIC_1940
-from GLS.das_decennial.programs.schema.attributes.citizen1940 import Citizen1940Attr as CITIZEN_1940
 from GLS.das_decennial.programs.schema.attributes.race1940 import Race1940Attr as RACE_1940
 from GLS.das_decennial.programs.schema.attributes.agecat import AgecatAttr as AGECAT
 from GLS.das_decennial.programs.schema.attributes.hhgq_unit_demoproduct import HHGQUnitDemoProductAttr as HHGQ_UNIT

@@ -8,20 +8,11 @@ In addition to the main algorithm, this repo also provides the script `two_pass_
 ## How to Run
 To run the drivers for this program:
 
-1. Clone this repo: `git clone git@github.t26.it.census.gov:DAS/GLS-Public-Release.git`
-2. Start up a cluster by logging into AWS Console and going to CloudFormation -> Stacks. On this page on the top right, click "Create Stack" -> then "With new resources (standard)".
-3. On the Create Stack page, choose "Upload a template file", then "Choose file". The file you'll choose will be the `GLS_Public.template` from this repo. Then hit "Next".
-4. On this page, you'll fill out the details for your cluster. The following are required ones to fill out. After you're done, hit "Next".
-    - Stack Name
-    - Env
-    - Cluster Purpose
-    - Project Purpose
-    - Product Value
-    - TeamValue
-5. On this page, check the checkboxes at the end of the page. Hit "Next".
-6. On this page, review that everything you've chosen are correct. Then start up the stack.
-7. On the EMR page, wait until the cluster has finished setting up and is in the 'WAITING' stage. Copy the IP and go into the cluster `ssh -A hadoop@{CLUSTER IP}`
-8. Once you're in the cluster, clone the repo again.
-9. After cloning the repo, `cd` into the repo.
-10. Run the environment setup: `sudo bash setup_environment.sh`. This will take care of setting up the virtual environment, the third party requirements, and the .zip file for spark.
-11. After this, you're done setting up! All that's left is to run the drivers. For example, to call the PL94 driver for Puerto Rico, you can do `driver=drivers/pr_pl94.py nohup bash run_cluster.sh 2>&1 1> run_gls.log &`.
+1. Have either an EMR cluster or Spark environment set up.
+2. Go into the environment, and then clone the repo.
+3. After cloning the repo, `cd` into the repo.
+4. Run the environment setup: `sudo bash setup_environment.sh`. This will take care of setting up the virtual environment, the third party requirements, and the .zip file for spark.
+5. After this, you're done setting up! All that's left is to run the drivers. For example, to call the PL94 driver for Puerto Rico, you can do `driver=GLS/drivers/pr_pl94.py nohup bash GLS/run_cluster.sh 2>&1 1> run_gls.log &`.
+
+## Additional Notes
+This repo runs far faster if `numpy` is compiled using the `MKL LAPACK` and `BLAS`. 
