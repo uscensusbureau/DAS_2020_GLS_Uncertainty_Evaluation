@@ -12,7 +12,7 @@ To run the drivers for this program:
 2. Go into the environment, and then clone the repo.
 3. After cloning the repo, `cd` into the repo.
 4. Run the environment setup: `sudo bash setup_environment.sh`. This will take care of setting up the virtual environment, the third party requirements, and the .zip file for spark.
-5. After this, you're done setting up! All that's left is to download the required noisy measurement files from AWS Open Data, set the reader paths in the desired driver file (e.g., drivers/pr_pl94.py) to the paths of the NMFs, set the writer paths in the driver files, and then run the driver file. For example, to call the PL94 driver for Puerto Rico, you can do `driver=GLS/drivers/pr_pl94.py nohup bash GLS/run_cluster.sh 2>&1 1> run_gls.log &`.
+5. After this, you're done setting up! All that's left is to download the required noisy measurement files from AWS Open Data, set the reader paths in the desired driver file (e.g., drivers/pr_pl94.py) to the paths of the NMFs, set the writer paths in the driver files, and then run the driver file. For example, to call the PL94 driver for Puerto Rico, you can do `driver=GLS/drivers/pr_pl94_2020.py nohup bash run_cluster.sh 2>&1 1> out_run_gls.log &`.
 
 ## Additional Notes
 This repo runs far faster if `numpy` is compiled using the `MKL LAPACK` and `BLAS`. 
