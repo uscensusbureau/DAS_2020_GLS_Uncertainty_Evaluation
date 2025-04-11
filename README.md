@@ -8,7 +8,7 @@ In addition to the main algorithm, this repo also provides the script `two_pass_
 ## How to Run
 To run the drivers for this program:
 
-1. Have either an EMR cluster or Spark environment set up.
+1. Have either an EMR cluster or Spark environment set up. Important note: The spark submit configured in this run is intended to run with r6i.8xlarge instances. If your environment is not using at least this size, it is recommended to adjust the spark-submit configurations in the `run_cluster.sh` script.
 2. Go into the environment, and then clone the repo.
 3. After cloning the repo, `cd` into the repo.
 4. Run the environment setup: `sudo bash setup_environment.sh`. This will take care of setting up the virtual environment, the third party requirements, and the .zip file for spark.
